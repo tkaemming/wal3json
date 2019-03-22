@@ -57,9 +57,6 @@ typedef struct
 	 */
 	bool		include_lsn;		/* include LSNs */
 
-	uint64		nr_changes;			/* # of passes in pg_decode_change() */
-									/* FIXME replace with txn->nentries */
-
 	/* pretty print */
 	char		ht[2];				/* horizontal tab, if pretty print */
 	char		nl[2];				/* new line, if pretty print */
@@ -157,8 +154,6 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 	t->allschemas = true;
 	t->alltables = true;
 	data->add_tables = lappend(data->add_tables, t);
-
-	data->nr_changes = 0;
 
 	ctx->output_plugin_private = data;
 
@@ -408,8 +403,6 @@ pg_decode_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 {
 	JsonDecodingData *data = ctx->output_plugin_private;
 
-	data->nr_changes = 0;
-
 	/* Transaction starts */
 	OutputPluginPrepareWrite(ctx, true);
 
@@ -446,7 +439,7 @@ pg_decode_commit_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 		elog(DEBUG2, "txn has catalog changes: yes");
 	else
 		elog(DEBUG2, "txn has catalog changes: no");
-	elog(DEBUG2, "my change counter: %lu ; # of changes: %lu ; # of changes in memory: %lu", data->nr_changes, txn->nentries, txn->nentries_mem);
+	elog(DEBUG2, "# of changes: %lu ; # of changes in memory: %lu", txn->nentries, txn->nentries_mem);
 	elog(DEBUG2, "# of subxacts: %d", txn->nsubtxns);
 
 	/* Transaction ends */
@@ -901,13 +894,7 @@ pg_decode_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 			Assert(false);
 	}
 
-	/* Change counter */
-	data->nr_changes++;
-
 	appendStringInfo(ctx->out, "%s%s", data->ht, data->ht);
-
-	if (data->nr_changes > 1)
-		appendStringInfoChar(ctx->out, ',');
 
 	appendStringInfo(ctx->out, "{%s", data->nl);
 
@@ -1028,21 +1015,11 @@ pg_decode_message(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 
 	OutputPluginPrepareWrite(ctx, true);
 
-	/*
-	 * increment counter only for transactional messages because
-	 * non-transactional message has only one object.
-	 */
-	if (transactional)
-		data->nr_changes++;
-
 	/* build a complete JSON object for non-transactional message */
 	if (!transactional)
 		appendStringInfo(ctx->out, "{%s%s\"change\":%s[%s", data->nl, data->ht, data->sp, data->nl);
 
 	appendStringInfo(ctx->out, "%s%s", data->ht, data->ht);
-
-	if (data->nr_changes > 1)
-		appendStringInfoChar(ctx->out, ',');
 
 	appendStringInfo(ctx->out, "{%s%s%s%s\"kind\":%s\"message\",%s", data->nl, data->ht, data->ht, data->ht, data->sp, data->nl);
 
