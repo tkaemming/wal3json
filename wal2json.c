@@ -335,18 +335,8 @@ pg_decode_shutdown(LogicalDecodingContext *ctx)
 static void
 pg_decode_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 {
-	JsonDecodingData *data = ctx->output_plugin_private;
-
-	/* Transaction starts */
 	OutputPluginPrepareWrite(ctx, true);
-
-	appendStringInfo(ctx->out, "{%s", data->nl);
-	appendStringInfo(ctx->out, "%s\"xid\":%s%u,%s", data->ht, data->sp, txn->xid, data->nl);
-
-	appendStringInfo(ctx->out, "%s\"timestamp\":%s\"%s\",%s", data->ht, data->sp, timestamptz_to_str(txn->commit_time), data->nl);
-
-	appendStringInfo(ctx->out, "%s\"change\":%s[", data->ht, data->sp);
-
+	appendStringInfo(ctx->out, "{\"event\":\"begin\",\"xid\":%u,\"timestamp\":\"%s\"}", txn->xid, timestamptz_to_str(txn->commit_time));
 	OutputPluginWrite(ctx, true);
 }
 
@@ -355,20 +345,8 @@ static void
 pg_decode_commit_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 					 XLogRecPtr commit_lsn)
 {
-	JsonDecodingData *data = ctx->output_plugin_private;
-
-	if (txn->has_catalog_changes)
-		elog(DEBUG2, "txn has catalog changes: yes");
-	else
-		elog(DEBUG2, "txn has catalog changes: no");
-	elog(DEBUG2, "# of changes: %lu ; # of changes in memory: %lu", txn->nentries, txn->nentries_mem);
-	elog(DEBUG2, "# of subxacts: %d", txn->nsubtxns);
-
-	/* Transaction ends */
 	OutputPluginPrepareWrite(ctx, true);
-
-	appendStringInfo(ctx->out, "%s]%s}", data->ht, data->nl);
-
+	appendStringInfo(ctx->out, "{\"event\":\"commit\"}");
 	OutputPluginWrite(ctx, true);
 }
 
@@ -816,34 +794,32 @@ pg_decode_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 			Assert(false);
 	}
 
-	appendStringInfo(ctx->out, "%s%s", data->ht, data->ht);
-
-	appendStringInfo(ctx->out, "{%s", data->nl);
+	appendStringInfo(ctx->out, "{");
 
 	/* Print change kind */
 	switch (change->action)
 	{
 		case REORDER_BUFFER_CHANGE_INSERT:
-			appendStringInfo(ctx->out, "%s%s%s\"kind\":%s\"insert\",%s", data->ht, data->ht, data->ht, data->sp, data->nl);
+			appendStringInfo(ctx->out, "\"event\":\"insert\",");
 			break;
 		case REORDER_BUFFER_CHANGE_UPDATE:
-			appendStringInfo(ctx->out, "%s%s%s\"kind\":%s\"update\",%s", data->ht, data->ht, data->ht, data->sp, data->nl);
+			appendStringInfo(ctx->out, "\"event\":\"update\",");
 			break;
 		case REORDER_BUFFER_CHANGE_DELETE:
-			appendStringInfo(ctx->out, "%s%s%s\"kind\":%s\"delete\",%s", data->ht, data->ht, data->ht, data->sp, data->nl);
+			appendStringInfo(ctx->out, "\"event\":\"delete\",");
 			break;
 		default:
 			Assert(false);
 	}
 
 	/* Print qualified table name */
-	appendStringInfo(ctx->out, "%s%s%s\"schema\":%s", data->ht, data->ht, data->ht, data->sp);
+	appendStringInfo(ctx->out, "\"schema\":");
 	escape_json(ctx->out, get_namespace_name(class_form->relnamespace));
-	appendStringInfo(ctx->out, ",%s", data->nl);
+	appendStringInfo(ctx->out, ",");
 
-	appendStringInfo(ctx->out, "%s%s%s\"table\":%s", data->ht, data->ht, data->ht, data->sp);
+	appendStringInfo(ctx->out, "\"table\":");
 	escape_json(ctx->out, NameStr(class_form->relname));
-	appendStringInfo(ctx->out, ",%s", data->nl);
+	appendStringInfo(ctx->out, ",");
 
 	switch (change->action)
 	{
@@ -909,7 +885,7 @@ pg_decode_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 			Assert(false);
 	}
 
-	appendStringInfo(ctx->out, "%s%s}", data->ht, data->ht);
+	appendStringInfo(ctx->out, "}");
 
 	MemoryContextSwitchTo(old);
 	MemoryContextReset(data->context);
