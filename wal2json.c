@@ -36,7 +36,6 @@ extern void	PGDLLEXPORT	_PG_output_plugin_init(OutputPluginCallbacks *cb);
 typedef struct
 {
 	MemoryContext context;
-	bool		include_timestamp;	/* include transaction timestamp */
 	bool		include_schemas;	/* qualify tables */
 	bool		include_types;		/* include data types */
 	bool		include_type_oids;	/* include data type oids */
@@ -130,7 +129,6 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 										ALLOCSET_DEFAULT_MAXSIZE
 #endif
                                         );
-	data->include_timestamp = false;
 	data->include_schemas = true;
 	data->include_types = true;
 	data->include_type_oids = false;
@@ -163,20 +161,7 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 
 		Assert(elem->arg == NULL || IsA(elem->arg, String));
 
-		if (strcmp(elem->defname, "include-timestamp") == 0)
-		{
-			if (elem->arg == NULL)
-			{
-				elog(DEBUG1, "include-timestamp argument is null");
-				data->include_timestamp = true;
-			}
-			else if (!parse_bool(strVal(elem->arg), &data->include_timestamp))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("could not parse value \"%s\" for parameter \"%s\"",
-							 strVal(elem->arg), elem->defname)));
-		}
-		else if (strcmp(elem->defname, "include-schemas") == 0)
+		if (strcmp(elem->defname, "include-schemas") == 0)
 		{
 			if (elem->arg == NULL)
 			{
@@ -402,8 +387,7 @@ pg_decode_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 		pfree(lsn_str);
 	}
 
-	if (data->include_timestamp)
-		appendStringInfo(ctx->out, "%s\"timestamp\":%s\"%s\",%s", data->ht, data->sp, timestamptz_to_str(txn->commit_time), data->nl);
+	appendStringInfo(ctx->out, "%s\"timestamp\":%s\"%s\",%s", data->ht, data->sp, timestamptz_to_str(txn->commit_time), data->nl);
 
 	appendStringInfo(ctx->out, "%s\"change\":%s[", data->ht, data->sp);
 
