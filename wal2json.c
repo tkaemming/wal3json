@@ -36,7 +36,6 @@ extern void	PGDLLEXPORT	_PG_output_plugin_init(OutputPluginCallbacks *cb);
 typedef struct
 {
 	MemoryContext context;
-	bool		include_schemas;	/* qualify tables */
 	bool		include_types;		/* include data types */
 	bool		include_type_oids;	/* include data type oids */
 	bool		include_typmod;		/* include typmod in types */
@@ -129,7 +128,6 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 										ALLOCSET_DEFAULT_MAXSIZE
 #endif
                                         );
-	data->include_schemas = true;
 	data->include_types = true;
 	data->include_type_oids = false;
 	data->include_typmod = true;
@@ -161,20 +159,7 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 
 		Assert(elem->arg == NULL || IsA(elem->arg, String));
 
-		if (strcmp(elem->defname, "include-schemas") == 0)
-		{
-			if (elem->arg == NULL)
-			{
-				elog(DEBUG1, "include-schemas argument is null");
-				data->include_schemas = true;
-			}
-			else if (!parse_bool(strVal(elem->arg), &data->include_schemas))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("could not parse value \"%s\" for parameter \"%s\"",
-							 strVal(elem->arg), elem->defname)));
-		}
-		else if (strcmp(elem->defname, "include-types") == 0)
+		if (strcmp(elem->defname, "include-types") == 0)
 		{
 			if (elem->arg == NULL)
 			{
@@ -880,13 +865,11 @@ pg_decode_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 			Assert(false);
 	}
 
-	/* Print table name (possibly) qualified */
-	if (data->include_schemas)
-	{
-		appendStringInfo(ctx->out, "%s%s%s\"schema\":%s", data->ht, data->ht, data->ht, data->sp);
-		escape_json(ctx->out, get_namespace_name(class_form->relnamespace));
-		appendStringInfo(ctx->out, ",%s", data->nl);
-	}
+	/* Print qualified table name */
+	appendStringInfo(ctx->out, "%s%s%s\"schema\":%s", data->ht, data->ht, data->ht, data->sp);
+	escape_json(ctx->out, get_namespace_name(class_form->relnamespace));
+	appendStringInfo(ctx->out, ",%s", data->nl);
+
 	appendStringInfo(ctx->out, "%s%s%s\"table\":%s", data->ht, data->ht, data->ht, data->sp);
 	escape_json(ctx->out, NameStr(class_form->relname));
 	appendStringInfo(ctx->out, ",%s", data->nl);
