@@ -48,12 +48,6 @@ typedef struct
 
 	int			format_version;		/* support different formats */
 
-	/*
-	 * LSN pointing to the end of commit record + 1 (txn->end_lsn)
-	 * It is useful for tools that wants a position to restart from.
-	 */
-	bool		include_lsn;		/* include LSNs */
-
 	/* pretty print */
 	char		ht[2];				/* horizontal tab, if pretty print */
 	char		nl[2];				/* new line, if pretty print */
@@ -132,7 +126,6 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 	data->include_type_oids = false;
 	data->include_typmod = true;
 	data->pretty_print = false;
-	data->include_lsn = false;
 	data->include_not_null = false;
 	data->filter_tables = NIL;
 
@@ -230,19 +223,6 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 				strncpy(data->nl, "\n", 1);
 				strncpy(data->sp, " ", 1);
 			}
-		}
-		else if (strcmp(elem->defname, "include-lsn") == 0)
-		{
-			if (elem->arg == NULL)
-			{
-				elog(DEBUG1, "include-lsn argument is null");
-				data->include_lsn = true;
-			}
-			else if (!parse_bool(strVal(elem->arg), &data->include_lsn))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("could not parse value \"%s\" for parameter \"%s\"",
-							 strVal(elem->arg), elem->defname)));
 		}
 		else if (strcmp(elem->defname, "include-unchanged-toast") == 0)
 		{
@@ -362,15 +342,6 @@ pg_decode_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 
 	appendStringInfo(ctx->out, "{%s", data->nl);
 	appendStringInfo(ctx->out, "%s\"xid\":%s%u,%s", data->ht, data->sp, txn->xid, data->nl);
-
-	if (data->include_lsn)
-	{
-		char *lsn_str = DatumGetCString(DirectFunctionCall1(pg_lsn_out, txn->end_lsn));
-
-		appendStringInfo(ctx->out, "%s\"nextlsn\":%s\"%s\",%s", data->ht, data->sp, lsn_str, data->nl);
-
-		pfree(lsn_str);
-	}
 
 	appendStringInfo(ctx->out, "%s\"timestamp\":%s\"%s\",%s", data->ht, data->sp, timestamptz_to_str(txn->commit_time), data->nl);
 
