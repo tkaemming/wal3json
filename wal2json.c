@@ -36,7 +36,6 @@ extern void	PGDLLEXPORT	_PG_output_plugin_init(OutputPluginCallbacks *cb);
 typedef struct
 {
 	MemoryContext context;
-	bool		include_xids;		/* include transaction ids */
 	bool		include_timestamp;	/* include transaction timestamp */
 	bool		include_schemas;	/* qualify tables */
 	bool		include_types;		/* include data types */
@@ -131,7 +130,6 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 										ALLOCSET_DEFAULT_MAXSIZE
 #endif
                                         );
-	data->include_xids = false;
 	data->include_timestamp = false;
 	data->include_schemas = true;
 	data->include_types = true;
@@ -165,21 +163,7 @@ pg_decode_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is
 
 		Assert(elem->arg == NULL || IsA(elem->arg, String));
 
-		if (strcmp(elem->defname, "include-xids") == 0)
-		{
-			/* If option does not provide a value, it means its value is true */
-			if (elem->arg == NULL)
-			{
-				elog(DEBUG1, "include-xids argument is null");
-				data->include_xids = true;
-			}
-			else if (!parse_bool(strVal(elem->arg), &data->include_xids))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("could not parse value \"%s\" for parameter \"%s\"",
-							 strVal(elem->arg), elem->defname)));
-		}
-		else if (strcmp(elem->defname, "include-timestamp") == 0)
+		if (strcmp(elem->defname, "include-timestamp") == 0)
 		{
 			if (elem->arg == NULL)
 			{
@@ -407,9 +391,7 @@ pg_decode_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn)
 	OutputPluginPrepareWrite(ctx, true);
 
 	appendStringInfo(ctx->out, "{%s", data->nl);
-
-	if (data->include_xids)
-		appendStringInfo(ctx->out, "%s\"xid\":%s%u,%s", data->ht, data->sp, txn->xid, data->nl);
+	appendStringInfo(ctx->out, "%s\"xid\":%s%u,%s", data->ht, data->sp, txn->xid, data->nl);
 
 	if (data->include_lsn)
 	{
