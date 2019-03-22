@@ -764,19 +764,19 @@ pg_decode_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
 			Assert(false);
 	}
 
-	appendStringInfo(ctx->out, "{");
+	appendStringInfo(ctx->out, "{\"event\":\"change\",");
 
 	/* Print change kind */
 	switch (change->action)
 	{
 		case REORDER_BUFFER_CHANGE_INSERT:
-			appendStringInfo(ctx->out, "\"event\":\"insert\",");
+			appendStringInfo(ctx->out, "\"action\":\"insert\",");
 			break;
 		case REORDER_BUFFER_CHANGE_UPDATE:
-			appendStringInfo(ctx->out, "\"event\":\"update\",");
+			appendStringInfo(ctx->out, "\"action\":\"update\",");
 			break;
 		case REORDER_BUFFER_CHANGE_DELETE:
-			appendStringInfo(ctx->out, "\"event\":\"delete\",");
+			appendStringInfo(ctx->out, "\"action\":\"delete\",");
 			break;
 		default:
 			Assert(false);
